@@ -16,13 +16,90 @@
  */
 package org.apache.camel.quarkus.component.csv.it;
 
-import org.apache.camel.builder.RouteBuilder;
+import java.util.List;
+import java.util.Map;
 
+import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
+import javax.ws.rs.Consumes;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.apache.camel.ProducerTemplate;
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.impl.engine.DefaultProducerTemplate;
+import org.jboss.logging.Logger;
+
+
+
+@Path("/csv")
+@ApplicationScoped
+//@javax.enterprise.context.RequestScoped
 
 public class CsvRouteBuilder extends RouteBuilder {
+    
+    private static final Logger LOG = Logger.getLogger(CsvRouteBuilder.class);
+
+
+    static ProducerTemplate producerTemplate;
+    
     @Override
     public void configure() {
         from("direct:json-to-csv").marshal().csv();
         from("direct:csv-to-json").unmarshal().csv();
+        if (producerTemplate == null) {
+            producerTemplate = new DefaultProducerTemplate(this.getContext());
+            producerTemplate.start();
+        }
     }
+
+
+    
+
+
+    public CsvRouteBuilder() {
+        System.out.println("=======>CsvResource is created" );
+        
+        
+    }
+
+    @Path("/json-to-csv")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.TEXT_PLAIN)
+    public String json2csv(String json) throws Exception {
+        LOG.infof("Transforming json %s", json);
+        final List<Map<String, Object>> objects = new ObjectMapper().readValue(json,  new TypeReference<List<Map<String, Object>>>() { });
+        try {
+            System.out.println("=======>producerTemplate is " + producerTemplate );
+            return producerTemplate.requestBody(
+                "direct:json-to-csv",
+                objects,
+                String.class);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Path("/csv-to-json")
+    @POST
+    @Consumes(MediaType.TEXT_PLAIN)
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<List<Object>> csv2json(String csv) throws Exception {
+        try {
+            return producerTemplate.requestBody("direct:csv-to-json", csv, List.class);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
+
+
 }
